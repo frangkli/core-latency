@@ -1,4 +1,5 @@
 #include <pthread.h>
+#include <string.h>
 
 #include <atomic>
 #include <chrono>
@@ -9,8 +10,10 @@
 #include <thread>
 #include <vector>
 
-constexpr unsigned NUM_SAMPLES = 1000;
-constexpr unsigned NUM_OPS = 100;
+constexpr int NUM_SAMPLES = 1000;
+constexpr int NUM_OPS = 100;
+
+enum OP_TYPE { READ, WRITE };
 
 // Gets a vector of available CPU cores
 void getCores(std::vector<int>& cores) {
@@ -39,6 +42,15 @@ void pinThread(int core) {
 }
 
 int main(int argc, char* argv[]) {
+    // Validate command-line arguments
+    if (argc != 2 || (strcmp(argv[1], "-r") && strcmp(argv[1], "-w"))) {
+        std::cerr << "Please specify -r (read) or -w (write)." << std::endl;
+        exit(1);
+    }
+
+    const OP_TYPE op = !strcmp(argv[1], "-r") ? READ : WRITE;
+
+    // Containers
     std::vector<int> cores;
     std::map<std::pair<int, int>, std::chrono::nanoseconds> data;
 
@@ -53,7 +65,7 @@ int main(int argc, char* argv[]) {
             alignas(64) std::atomic<int> n2 = {-1};
 
             std::thread t = std::thread([&] {
-                // Pin thread to core
+                // Pin new thread to core i
                 pinThread(i);
 
                 // Read operation
@@ -68,7 +80,7 @@ int main(int argc, char* argv[]) {
 
             std::chrono::nanoseconds rtt = std::chrono::nanoseconds::max();
 
-            // Pin thread to core
+            // Pin this thread to core j
             pinThread(j);
 
             // Read operation
