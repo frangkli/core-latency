@@ -68,12 +68,26 @@ int main(int argc, char* argv[]) {
                 // Pin new thread to core i
                 pinThread(i);
 
-                // Read operation
                 for (int s = 0; s < NUM_SAMPLES; s++) {
-                    for (int n = 0; n < NUM_OPS; n++) {
-                        while (n1.load(std::memory_order_acquire) != n)
-                            ;  // waiting for other thread
-                        n2.store(n, std::memory_order_release);
+                    switch (op) {
+                        case READ: {
+                            for (int n = 0; n < NUM_OPS; n++) {
+                                while (n1.load(std::memory_order_acquire) != n)
+                                    ;  // waiting for other thread
+                                n2.store(n, std::memory_order_release);
+                            }
+                            break;
+                        }
+                        case WRITE: {
+                            for (int n = 0; n < NUM_OPS; n++) {
+                                int cmp;
+                                do {
+                                    cmp = 2 * n;
+                                } while (
+                                    !n1.compare_exchange_strong(cmp, cmp + 1));
+                            }
+                            break;
+                        }
                     }
                 }
             });
@@ -83,17 +97,35 @@ int main(int argc, char* argv[]) {
             // Pin this thread to core j
             pinThread(j);
 
-            // Read operation
             for (int s = 0; s < NUM_SAMPLES; s++) {
                 n1 = n2 = -1;
-                auto tp1 = std::chrono::steady_clock::now();
-                for (int n = 0; n < NUM_OPS; n++) {
-                    n1.store(n, std::memory_order_release);
-                    while (n2.load(std::memory_order_acquire) != n)
-                        ;  // waiting for other thread
+                switch (op) {
+                    case READ: {
+                        auto tp1 = std::chrono::steady_clock::now();
+                        for (int n = 0; n < NUM_OPS; n++) {
+                            n1.store(n, std::memory_order_release);
+                            while (n2.load(std::memory_order_acquire) != n)
+                                ;  // waiting for other thread
+                        }
+                        auto tp2 = std::chrono::steady_clock::now();
+                        rtt = std::min(rtt, tp2 - tp1);
+                        break;
+                    }
+                    case WRITE: {
+                        auto tp1 = std::chrono::steady_clock::now();
+                        for (int n = 0; n < NUM_OPS; n++) {
+                            int cmp;
+                            do {
+                                cmp = 2 * n - 1;
+                            } while (!n1.compare_exchange_strong(cmp, cmp + 1));
+                        }
+                        while (n1.load(std::memory_order_acquire) != 199)
+                            ;  // waiting for other thread
+                        auto tp2 = std::chrono::steady_clock::now();
+                        rtt = std::min(rtt, tp2 - tp1);
+                        break;
+                    }
                 }
-                auto tp2 = std::chrono::steady_clock::now();
-                rtt = std::min(rtt, tp2 - tp1);
             }
 
             t.join();
