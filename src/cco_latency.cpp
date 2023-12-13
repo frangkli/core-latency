@@ -16,30 +16,15 @@ constexpr int NUM_OPS = 100;
 enum OP_TYPE { READ, WRITE };
 
 // Gets a vector of available CPU cores
-void getCores(std::vector<int>& cores) {
-    cpu_set_t set;
-    CPU_ZERO(&set);
-    if (sched_getaffinity(0, sizeof(cpu_set_t), &set) == -1) {
-        perror("Error calling sched_setaffinity.");
-        exit(1);
-    }
-    for (int i = 0; i < CPU_SETSIZE; i++) {
-        if (CPU_ISSET(i, &set)) {
-            cores.push_back(i);
-        }
-    }
-}
+void getCores(std::vector<int>& cores);
 
 // Pins thread to cpu core specified by parameter
-void pinThread(int core) {
-    cpu_set_t set;
-    CPU_ZERO(&set);
-    CPU_SET(core, &set);
-    if (sched_setaffinity(0, sizeof(cpu_set_t), &set) == -1) {
-        perror("Error calling sched_setaffinity.");
-        exit(1);
-    }
-}
+void pinThread(int core);
+
+// Print data in table format given data map and cores vector
+void printData(
+    const std::map<std::pair<int, int>, std::chrono::nanoseconds>& data,
+    const std::vector<int>& cores);
 
 int main(int argc, char* argv[]) {
     // Validate command-line arguments
@@ -136,6 +121,43 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // Print data table
+    printData(data, cores);
+
+    return 0;
+}
+
+/*
+ *  Helper Functions
+ */
+
+void getCores(std::vector<int>& cores) {
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    if (sched_getaffinity(0, sizeof(cpu_set_t), &set) == -1) {
+        perror("Error calling sched_setaffinity.");
+        exit(1);
+    }
+    for (int i = 0; i < CPU_SETSIZE; i++) {
+        if (CPU_ISSET(i, &set)) {
+            cores.push_back(i);
+        }
+    }
+}
+
+void pinThread(int core) {
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    CPU_SET(core, &set);
+    if (sched_setaffinity(0, sizeof(cpu_set_t), &set) == -1) {
+        perror("Error calling sched_setaffinity.");
+        exit(1);
+    }
+}
+
+void printData(
+    const std::map<std::pair<int, int>, std::chrono::nanoseconds>& data,
+    const std::vector<int>& cores) {
     std::cout << std::setw(4) << "CPU";
     for (size_t i = 0; i < cores.size(); ++i) {
         std::cout << " " << std::setw(4) << i;
@@ -144,10 +166,12 @@ int main(int argc, char* argv[]) {
     for (size_t i = 0; i < cores.size(); i++) {
         std::cout << std::setw(4) << i;
         for (size_t j = 0; j < cores.size(); j++) {
-            std::cout << " " << std::setw(4) << data[{i, j}].count();
+            if (i == j) {
+                std::cout << " " << std::setw(4) << 0;
+            } else {
+                std::cout << " " << std::setw(4) << data.at({i, j}).count();
+            }
         }
         std::cout << std::endl;
     }
-
-    return 0;
 }
