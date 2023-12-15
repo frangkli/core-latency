@@ -11,7 +11,7 @@
 #include <vector>
 
 constexpr int NUM_SAMPLES = 1000;
-constexpr int NUM_OPS = 100;
+constexpr int NUM_OPS = 200;
 
 enum OP_TYPE { READ, WRITE };
 
@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
                 }
             });
 
-            std::chrono::nanoseconds rtt = std::chrono::nanoseconds::max();
+            std::chrono::nanoseconds rtt = std::chrono::nanoseconds::zero();
 
             // Pin this thread to core j
             pinThread(j);
@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
                                 ;  // waiting for other thread
                         }
                         auto tp2 = std::chrono::high_resolution_clock::now();
-                        rtt = std::min(rtt, tp2 - tp1);
+                        rtt += tp2 - tp1;
                         break;
                     }
                     case WRITE: {
@@ -104,10 +104,11 @@ int main(int argc, char* argv[]) {
                                 cmp = 2 * n - 1;
                             } while (!n1.compare_exchange_strong(cmp, cmp + 1));
                         }
-                        while (n1.load(std::memory_order_acquire) != 199)
+                        while (n1.load(std::memory_order_acquire) !=
+                               NUM_OPS * 2 - 1)
                             ;  // waiting for other thread
                         auto tp2 = std::chrono::high_resolution_clock::now();
-                        rtt = std::min(rtt, tp2 - tp1);
+                        rtt += tp2 - tp1;
                         break;
                     }
                 }
@@ -115,7 +116,7 @@ int main(int argc, char* argv[]) {
 
             t.join();
 
-            auto result = rtt / 2 / NUM_OPS;
+            auto result = rtt / (2 * NUM_OPS * NUM_SAMPLES);
             data[{i, j}] = result;
             data[{j, i}] = result;
         }
