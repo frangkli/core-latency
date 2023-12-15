@@ -3,10 +3,10 @@
 
 #include <atomic>
 #include <chrono>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <map>
-#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -24,7 +24,7 @@ void pinThread(int core);
 // Print data in table format given data map and cores vector
 void printData(
     const std::map<std::pair<int, int>, std::chrono::nanoseconds>& data,
-    const std::vector<int>& cores);
+    int coreNum, OP_TYPE op);
 
 int main(int argc, char* argv[]) {
     // Validate command-line arguments
@@ -86,18 +86,18 @@ int main(int argc, char* argv[]) {
                 n1 = n2 = -1;
                 switch (op) {
                     case READ: {
-                        auto tp1 = std::chrono::steady_clock::now();
+                        auto tp1 = std::chrono::high_resolution_clock::now();
                         for (int n = 0; n < NUM_OPS; n++) {
                             n1.store(n, std::memory_order_release);
                             while (n2.load(std::memory_order_acquire) != n)
                                 ;  // waiting for other thread
                         }
-                        auto tp2 = std::chrono::steady_clock::now();
+                        auto tp2 = std::chrono::high_resolution_clock::now();
                         rtt = std::min(rtt, tp2 - tp1);
                         break;
                     }
                     case WRITE: {
-                        auto tp1 = std::chrono::steady_clock::now();
+                        auto tp1 = std::chrono::high_resolution_clock::now();
                         for (int n = 0; n < NUM_OPS; n++) {
                             int cmp;
                             do {
@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
                         }
                         while (n1.load(std::memory_order_acquire) != 199)
                             ;  // waiting for other thread
-                        auto tp2 = std::chrono::steady_clock::now();
+                        auto tp2 = std::chrono::high_resolution_clock::now();
                         rtt = std::min(rtt, tp2 - tp1);
                         break;
                     }
@@ -122,7 +122,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Print data table
-    printData(data, cores);
+    printData(data, cores.size(), op);
 
     return 0;
 }
@@ -157,21 +157,28 @@ void pinThread(int core) {
 
 void printData(
     const std::map<std::pair<int, int>, std::chrono::nanoseconds>& data,
-    const std::vector<int>& cores) {
-    std::cout << std::setw(4) << "CPU";
-    for (size_t i = 0; i < cores.size(); ++i) {
-        std::cout << " " << std::setw(4) << i;
+    int coreNum, OP_TYPE op) {
+    std::ofstream csvfile;
+    std::string filename;
+    switch (op) {
+        case READ:
+            filename = "data/cco_read_results.csv";
+            break;
+        case WRITE:
+            filename = "data/cco_write_results.csv";
+            break;
     }
-    std::cout << std::endl;
-    for (size_t i = 0; i < cores.size(); i++) {
-        std::cout << std::setw(4) << i;
-        for (size_t j = 0; j < cores.size(); j++) {
+    csvfile.open(filename, std::ofstream::trunc);
+    csvfile << "Core 1,Core 2,Latency (Nanoseconds)" << std::endl;
+    for (int i = 0; i < coreNum; i++) {
+        for (int j = 0; j < coreNum; j++) {
+            csvfile << i << "," << j << ",";
             if (i == j) {
-                std::cout << " " << std::setw(4) << 0;
+                csvfile << 0;
             } else {
-                std::cout << " " << std::setw(4) << data.at({i, j}).count();
+                csvfile << data.at({i, j}).count();
             }
+            csvfile << std::endl;
         }
-        std::cout << std::endl;
     }
 }
